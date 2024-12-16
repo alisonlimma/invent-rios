@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Captura de Dados e Envio para Google Forms</title>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@v2.1.1/dist/tesseract.min.js"></script>
+    <style>
+        #cameraContainer {
+            display: none;
+            text-align: center;
+        }
+        #captureBox {
+            position: absolute;
+            border: 2px dashed red;
+            width: 300px;
+            height: 150px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.5);
+        }
+        #videoElement {
+            width: 100%;
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Captura de Dados e Envio para Google Forms</h1>
+
+    <!-- Caixa para selecionar a categoria -->
+    <div id="categorySelection">
+        <label><input type="checkbox" id="embarcardos" /> EMBARCADOS</label><br>
+        <label><input type="checkbox" id="bordo" /> BORDO</label><br>
+        <label><input type="checkbox" id="radio" /> RADIO</label><br>
+        <label><input type="checkbox" id="piloto" /> PILOTO AUTOMÁTICO</label><br>
+        <label><input type="checkbox" id="mtg" /> MTG</label><br>
+        <label><input type="checkbox" id="aut" /> AUTOMAÇÃO</label><br>
+        <label><input type="checkbox" id="ravo" /> RAVO ABASTECIMENTO</label><br>
+        <button id="startCamera">Iniciar Captura</button>
+    </div>
+
+    <!-- Container para a câmera -->
+    <div id="cameraContainer">
+        <video id="videoElement" autoplay></video>
+        <div id="captureBox"></div>
+        <button id="captureButton">Capturar Imagem</button>
+        <button id="submitButton" style="display: none;">Enviar Dados</button>
+    </div>
+
+    <p id="statusMessage"></p>
+
+    <script>
+        const startCameraButton = document.getElementById('startCamera');
+        const cameraContainer = document.getElementById('cameraContainer');
+        const videoElement = document.getElementById('videoElement');
+        const captureBox = document.getElementById('captureBox');
+        const captureButton = document.getElementById('captureButton');
+        const submitButton = document.getElementById('submitButton');
+        const statusMessage = document.getElementById('statusMessage');
+
+        let selectedCategories = [];
+        let formData = {}; // Vai armazenar os dados coletados para enviar ao Google Forms
+
+        // Captura as categorias selecionadas
+        function getSelectedCategories() {
+            selectedCategories = [];
+            if (document.getElementById('embarcardos').checked) selectedCategories.push('EMBARCADOS');
+            if (document.getElementById('bordo').checked) selectedCategories.push('BORDO');
+            if (document.getElementById('radio').checked) selectedCategories.push('RADIO');
+            if (document.getElementById('piloto').checked) selectedCategories.push('PILOTO AUTOMÁTICO');
+            if (document.getElementById('mtg').checked) selectedCategories.push('MTG');
+            if (document.getElementById('aut').checked) selectedCategories.push('AUTOMAÇÃO');
+            if (document.getElementById('ravo').checked) selectedCategories.push('RAVO ABASTECIMENTO');
+        }
+
+        // Função para iniciar a câmera
+        function startCamera() {
+            getSelectedCategories();
+            if (selectedCategories.length === 0) {
+                alert("Selecione pelo menos uma categoria!");
+                return;
+            }
+
+            cameraContainer.style.display = 'block';
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                // Força a solicitação de permissão
+                navigator.mediaDevices.getUserMedia({ video: true })
+                    .then(stream => {
+                        videoElement.srcObject = stream;
+                    })
+                    .catch(err => {
+                        console.error("Erro ao acessar a câmera: ", err);
+                        statusMessage.textContent = 'Não foi possível acessar a câmera. Certifique-se de que a permissão foi concedida.';
+                    });
+            } else {
+                alert("Câmera não é suportada neste dispositivo.");
+            }
+        }
+
+        // Função para capturar a imagem
+        captureButton.addEventListener('click', () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = videoElement.videoWidth;
+            canvas.height = videoElement.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+
+            // Realizar OCR com Tesseract
+            Tesseract.recognize(canvas.toDataURL(), 'eng')
+                .then(({ data: { text } }) => {
+                    const numeros = text.match(/\d+/g);
+                    if (numeros) {
+                        formData[selectedCategories[0]] = numeros[0]; // Exemplo para o primeiro checkbox selecionado
+                    }
+
+                    statusMessage.textContent = `Número detectado: ${formData[selectedCategories[0]]}`;
+                    captureButton.style.display = 'none';
+                    submitButton.style.display = 'inline-block';
+                })
+                .catch(err => {
+                    console.error("Erro ao processar OCR:", err);
+                    statusMessage.textContent = 'Erro ao processar a imagem.';
+                });
+        });
+
+        // Enviar os dados para o Google Forms
+        submitButton.addEventListener('click', () => {
+            const formUrl = "https://docs.google.com/forms/d/e/1FAIpQLSdkL-fvTc1Er9xwmP0UedPOtG1smHjdnTtdv3XX0Z-gBDQblA/formResponse";
+            const formDataParams = new URLSearchParams();
+
+            selectedCategories.forEach(category => {
+                if (formData[category]) {
+                    formDataParams.append(`entry.123456789`, formData[category]);
+                }
+            });
+
+            fetch(formUrl, {
+                method: 'POST',
+                body: formDataParams,
+                mode: 'no-cors'
+            })
+            .then(() => {
+                alert('Dados enviados com sucesso!');
+                cameraContainer.style.display = 'none';
+            })
+            .catch(err => {
+                console.error('Erro ao enviar:', err);
+                statusMessage.textContent = 'Erro ao enviar os dados.';
+            });
+        });
+
+        // Iniciar captura quando o botão for clicado
+        startCameraButton.addEventListener('click', startCamera);
+    </script>
+</body>
+</html>
